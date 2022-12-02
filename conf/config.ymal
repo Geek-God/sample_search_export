@@ -1,0 +1,20 @@
+timezone: Asia/Shanghai
+mysql:
+  host: 192.168.3.13
+  username: huorong
+  password: hurong!Q@W#E123
+  charset: utf8mb4
+  port: 3306
+  database: samples_system
+elastic:
+  host: http://sample.es.cn:9200/
+minio:
+  host: 192.168.1.83:9000
+  access_key: upload
+  secret_key: hr_upload#
+log:
+  use_json: true
+  logger_level: info
+  logger_info_file: logs/info.log
+  logger_error_file: logs/error.log
+  daemon_file: logs/daemon.log
