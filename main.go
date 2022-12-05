@@ -6,6 +6,7 @@
 package main
 
 import (
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"log"
 	"os"
@@ -46,8 +47,13 @@ func init() {
 	}
 }
 func main() {
-	err := SampleSearchExport.Export()
-	log.Fatal(err)
+	for {
+		err := SampleSearchExport.Export()
+		if err != nil {
+			logrus.Error(err.Error())
+		}
+		time.Sleep(300 * time.Second)
+	}
 }
 
 // makeDir

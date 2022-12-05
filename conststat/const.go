@@ -5,7 +5,9 @@
 
 package conststat
 
-import "time"
+import (
+	"time"
+)
 
 const (
 	ROOT_PATH string = "./"

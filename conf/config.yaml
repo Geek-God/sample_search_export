@@ -12,6 +12,7 @@ minio:
   host: 192.168.1.83:9000
   access_key: upload
   secret_key: hr_upload#
+  bucket_name: sample-export
 export:
   path: ./export
 log:

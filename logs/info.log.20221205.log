@@ -1,0 +1,4 @@
+{"file":"D:/sample_search_export/service/SampleSearchExport/SampleSearchExport.go:77","func":"sample_search_export/service/SampleSearchExport.antsSubmit.func1","level":"info","msg":"开始导出，任务id：2","time":"2022-12-05 21:37:17"}
+{"file":"D:/sample_search_export/service/SampleSearchExport/SampleSearchExport.go:113","func":"sample_search_export/service/SampleSearchExport.antsSubmit.func1","level":"info","msg":"结束导出，任务id：2","time":"2022-12-05 21:37:17"}
+{"file":"D:/sample_search_export/service/SampleSearchExport/SampleSearchExport.go:77","func":"sample_search_export/service/SampleSearchExport.antsSubmit.func1","level":"info","msg":"开始导出，任务id：2","time":"2022-12-05 21:42:07"}
+{"file":"D:/sample_search_export/service/SampleSearchExport/SampleSearchExport.go:113","func":"sample_search_export/service/SampleSearchExport.antsSubmit.func1","level":"info","msg":"结束导出，任务id：2","time":"2022-12-05 21:42:08"}

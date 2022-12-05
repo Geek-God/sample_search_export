@@ -7,6 +7,7 @@ require (
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/olivere/elastic/v6 v6.2.1
+	github.com/panjf2000/ants/v2 v2.6.0
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/viper v1.14.0

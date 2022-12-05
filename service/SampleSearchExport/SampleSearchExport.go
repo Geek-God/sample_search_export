@@ -9,12 +9,20 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/minio/minio-go"
 	"github.com/olivere/elastic/v6"
+	"github.com/panjf2000/ants/v2"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"io"
 	"log"
 	"os"
+	"path"
+	"runtime"
 	"sample_search_export/conststat"
+	"sample_search_export/initd/minioInitd"
 	"sample_search_export/model/elasticModel"
 	"sample_search_export/model/mysqlModel"
 	"sample_search_export/utils"
@@ -26,54 +34,87 @@ import (
 // @Author WXZ
 // @Description: //TODO
 type task struct {
+	//导出字段
 	sliceField []string
 	ch         chan map[string]interface{}
 	exportInfo *mysqlModel.SampleSearchExport
-	sy         sync.WaitGroup
+	//本地存储地址
+	localPath string
+	sy        sync.WaitGroup
 }
 
 // Export
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO 导出
 // @return error
 func Export() error {
+	//开启协程池。
+	ants_pool, err := ants.NewPool(runtime.NumCPU(), ants.WithPreAlloc(true))
+	if err != nil {
+		return err
+	}
+	defer ants_pool.Release()
+
 	m := &mysqlModel.SampleSearchExport{}
 	list, err := m.ExportList()
 	if err != nil {
 		return err
 	}
 	for _, v := range list {
-		v.Status = conststat.STATUS_START
-		err = v.Update()
+		antsSubmit(ants_pool, v)
+	}
+	return nil
+}
+
+// antsSubmit
+// @Author WXZ
+// @Description: //TODO
+// @param antsPool *ants.Pool
+// @param info mysqlModel.SampleSearchExport
+// @return error
+func antsSubmit(antsPool *ants.Pool, info mysqlModel.SampleSearchExport) error {
+	return antsPool.Submit(func() {
+		logrus.Infof("开始导出，任务id：%v", info.ID)
+		info.Status = conststat.STATUS_START
+		err := info.Update()
 		if err != nil {
 			log.Fatal(err)
 		}
 		t := &task{
-			sliceField: strings.Split(v.Fields, ","),
+			sliceField: strings.Split(info.Fields, ","),
 			ch:         make(chan map[string]interface{}, 1000),
-			exportInfo: &v,
+			exportInfo: &info,
 		}
+
 		t.sy.Add(2)
+		//异步写入文件
 		go t.writeFile()
-		if v.Type == conststat.SEARCH_UPLOAD {
+
+		//是否为上传文件
+		if info.Type == conststat.SEARCH_UPLOAD {
 			err = t.fileExport()
 		} else {
 			err = t.elasticExport()
 		}
 		t.sy.Wait()
 
+		if err == nil {
+			//上传MINIO
+			err = t.uploadMinio()
+		}
+
 		if err != nil {
 			t.exportInfo.Status = conststat.STATUS_FAIL
 			t.exportInfo.Remark = err.Error()
-
 		} else {
 			t.exportInfo.Status = conststat.STATUS_END
 		}
+
+		logrus.Infof("结束导出，任务id：%v", info.ID)
 		if err = t.exportInfo.Update(); err != nil {
-			return err
+			logrus.Error(err)
 		}
-	}
-	return nil
+	})
 }
 
 // writeFile
@@ -85,12 +126,14 @@ func (t *task) writeFile() error {
 	defer t.sy.Done()
 
 	file_name := fmt.Sprintf("./%d.csv", t.exportInfo.ID)
-	if utils.FileExists(file_name) {
-		if err := os.Remove(file_name); err != nil {
+	t.localPath = path.Join(viper.GetString("export.path"), file_name)
+
+	if utils.FileExists(t.localPath) {
+		if err := os.Remove(t.localPath); err != nil {
 			return err
 		}
 	}
-	file, err := os.OpenFile(file_name, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0766)
+	file, err := os.OpenFile(t.localPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0766)
 	if err != nil {
 		return err
 	}
@@ -114,7 +157,6 @@ func (t *task) writeFile() error {
 				str := strings.Join(slice_str, ",")
 				line += fmt.Sprintf("\"%s\",", str)
 			default:
-				fmt.Println(fmt.Sprintf("\"%v\",", v[value]))
 				line += fmt.Sprintf("\"%v\",", v[value])
 			}
 		}
@@ -150,16 +192,21 @@ func (t *task) elasticExport() error {
 	//简单搜索
 	case conststat.SEARCH_SIMPLE:
 		simples := strings.Split(t.exportInfo.Condition, ",")
+		simples_inter := make([]interface{}, 0, len(simples))
+		for _, v := range simples {
+			simples_inter = append(simples_inter, v)
+		}
 		//判读是否为搜索sha1
 		ok, err := utils.SampleSha1Metch(simples[0])
 		if err != nil {
 			return err
 		}
+
 		terms_field := "sha1"
 		if !ok {
 			terms_field = "id"
 		}
-		query = append(query, elastic.NewTermsQuery(terms_field, simples))
+		query = append(query, elastic.NewTermsQuery(terms_field, simples_inter...))
 	default:
 		query = append(query, elastic.NewQueryStringQuery(t.exportInfo.Condition))
 	}
@@ -338,4 +385,45 @@ func (t *task) fileExport() error {
 	} else {
 		return t.readLineFile()
 	}
+}
+
+// uploadMinio
+// @Author WXZ
+// @Description: //TODO  上传minio
+// @receiver t *task
+// @return error
+func (t *task) uploadMinio() error {
+	if !utils.FileExists(t.localPath) {
+		return errors.New("路径不存在 " + t.localPath)
+	}
+
+	c, err := minioInitd.Client()
+	if err != nil {
+		return err
+	}
+
+	bucket_name := viper.GetString("minio.bucket_name")
+	ok, err := c.BucketExists(bucket_name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		//创建桶
+		err = c.MakeBucket(bucket_name, "cn-north-1")
+		if err != nil {
+			return err
+		}
+	}
+	obj_name := path.Base(t.localPath)
+	_, err = c.FPutObject(
+		bucket_name,
+		obj_name,
+		t.localPath,
+		minio.PutObjectOptions{ContentType: "application/text"},
+	)
+	if err == nil {
+		t.exportInfo.DownUrl = path.Join("http://"+viper.GetString("minio.host"), bucket_name, obj_name)
+		os.Remove(t.localPath)
+	}
+	return err
 }
