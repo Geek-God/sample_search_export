@@ -29,7 +29,7 @@ func new(host, accessKey, secretKey string, secure bool) (*minio.Client, error) 
 	return minio.New(host, accessKey, secretKey, secure)
 }
 
-// Init
+// New
 // @Author WXZ
 // @Description: //TODO
 // @return error
