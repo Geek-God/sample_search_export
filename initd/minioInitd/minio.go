@@ -52,11 +52,11 @@ func New() error {
 // @Author WXZ
 // @Description: //TODO
 // @return *minio.Client
-func Client() *minio.Client {
+func Client() (*minio.Client, error) {
 	if m == nil {
 		if err := New(); err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
-	return m.c
+	return m.c, nil
 }

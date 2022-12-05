@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"github.com/olivere/elastic/v6"
 	"io"
+	"log"
 	"os"
+	"sample_search_export/conststat"
 	"sample_search_export/model/elasticModel"
 	"sample_search_export/model/mysqlModel"
+	"sample_search_export/utils"
 	"strings"
 	"sync"
 )
@@ -40,16 +43,19 @@ func Export() error {
 		return err
 	}
 	for _, v := range list {
-		v.Status = 1
-		v.Update()
+		v.Status = conststat.STATUS_START
+		err = v.Update()
+		if err != nil {
+			log.Fatal(err)
+		}
 		t := &task{
-			sliceField: strings.Split(v.Condition, ","),
+			sliceField: strings.Split(v.Fields, ","),
 			ch:         make(chan map[string]interface{}, 1000),
 			exportInfo: &v,
 		}
-		t.sy.Add(1)
+		t.sy.Add(2)
 		go t.writeFile()
-		if v.Type == 4 {
+		if v.Type == conststat.SEARCH_UPLOAD {
 			err = t.fileExport()
 		} else {
 			err = t.elasticExport()
@@ -57,13 +63,16 @@ func Export() error {
 		t.sy.Wait()
 
 		if err != nil {
-			t.exportInfo.Status = 3
+			t.exportInfo.Status = conststat.STATUS_FAIL
+			fmt.Println(err.Error())
 			t.exportInfo.Remark = err.Error()
 
 		} else {
-			t.exportInfo.Status = 2
+			t.exportInfo.Status = conststat.STATUS_END
 		}
-		t.exportInfo.Update()
+		if err = t.exportInfo.Update(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -77,7 +86,12 @@ func (t *task) writeFile() error {
 	defer t.sy.Done()
 
 	file_name := fmt.Sprintf("./%d.csv", t.exportInfo.ID)
-	file, err := os.Open(file_name)
+	if utils.FileExists(file_name) {
+		if err := os.Remove(file_name); err != nil {
+			return err
+		}
+	}
+	file, err := os.OpenFile(file_name, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0766)
 	if err != nil {
 		return err
 	}
@@ -86,24 +100,30 @@ func (t *task) writeFile() error {
 	//往文件里面写入内容，得到了一个writer对象
 	writer := bufio.NewWriter(file)
 	line := ""
-	writer.WriteString(t.exportInfo.Condition + "\n")
+	writer.WriteString(t.exportInfo.Fields + "\n")
 	for {
 		v, ok := <-t.ch
-		if ok {
-			line = ""
-			for _, value := range t.sliceField {
-				switch v[value].(type) {
-				case []string:
-					slice_str := (v[value]).([]string)
-					str := strings.Join(slice_str, ",")
-					line += fmt.Sprintf("\"%s\",", str)
-				}
+		if !ok {
+			break
+		}
+
+		line = ""
+		for _, value := range t.sliceField {
+			switch (v[value]).(type) {
+			case []string:
+				slice_str := (v[value]).([]string)
+				str := strings.Join(slice_str, ",")
+				line += fmt.Sprintf("\"%s\",", str)
+			default:
+				fmt.Println(fmt.Sprintf("\"%v\",", v[value]))
 				line += fmt.Sprintf("\"%v\",", v[value])
 			}
-			if line != "" {
-				writer.WriteString(strings.Trim(line, ",") + "\n")
-			}
 		}
+		if line != "" {
+			writer.WriteString(strings.Trim(line, ",") + "\n")
+			writer.Flush()
+		}
+
 	}
 	//将缓存中内容的写入文件
 	return writer.Flush()
@@ -120,21 +140,41 @@ func (t *task) elasticExport() error {
 
 	search_after := []interface{}{}
 	ctx := context.Background()
-	sample := elasticModel.Samples{}
-	source := elastic.NewFetchSourceContext(true).Include(t.exportInfo.Fields)
-	query := elastic.NewBoolQuery()
-	query.Must(
-		elastic.NewQueryStringQuery(t.exportInfo.Condition),
-	)
+	size := 1000
 
+	sample := elasticModel.Samples{}
+	source := elastic.NewFetchSourceContext(true).Include(t.sliceField...)
+	bool_query := elastic.NewBoolQuery()
+	var query []elastic.Query
+
+	switch t.exportInfo.Type {
+	//简单搜索
+	case conststat.SEARCH_SIMPLE:
+		simples := strings.Split(t.exportInfo.Condition, ",")
+		//判读是否为搜索sha1
+		ok, err := utils.SampleSha1Metch(simples[0])
+		if err != nil {
+			return err
+		}
+		terms_field := "sha1"
+		if !ok {
+			terms_field = "id"
+		}
+		query = append(query, elastic.NewTermsQuery(terms_field, simples))
+	default:
+		query = append(query, elastic.NewQueryStringQuery(t.exportInfo.Condition))
+	}
+
+	bool_query.Must(query...)
 	for {
-		result, err := elasticModel.GetList(ctx, sample, query, source, search_after, 5000, true)
+		result, err := elasticModel.GetList(ctx, sample, bool_query, source, search_after, 1000, true)
 		if err != nil {
 			return err
 		}
 		if result == nil || result.Hits == nil || result.Hits.Hits == nil || len(result.Hits.Hits) <= 0 {
 			return nil
 		}
+		search_after = result.Hits.Hits[len(result.Hits.Hits)-1].Sort
 
 		for _, value := range result.Hits.Hits {
 			if value.Source == nil {
@@ -147,7 +187,11 @@ func (t *task) elasticExport() error {
 			}
 			t.ch <- data
 		}
+		if len(result.Hits.Hits) < size {
+			break
+		}
 	}
+	return nil
 }
 
 // fileExport

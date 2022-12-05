@@ -5,7 +5,10 @@
 
 package mysqlModel
 
-import mysqlInit "sample_search_export/initd/mysqlInitd"
+import (
+	mysqlInit "sample_search_export/initd/mysqlInitd"
+	"time"
+)
 
 // 自定义任务导出表
 type SampleSearchExport struct {
@@ -17,7 +20,6 @@ type SampleSearchExport struct {
 	DownUrl    string `gorm:"column:down_url;type:varchar(255)"`                         // 下载地址
 	UserID     int    `gorm:"column:user_id;type:int(10) unsigned;default:0;NOT NULL"`   // 发起用户id
 	UpdateTime string `gorm:"column:update_time;type:datetime;NOT NULL"`                 // 更新导出状态时间
-	AddTime    string `gorm:"column:add_time;type:datetime;NOT NULL"`                    // 发起时间
 	Remark     string `gorm:"column:remark;type:varchar(255)"`                           // 备注
 }
 
@@ -32,12 +34,12 @@ func (m *SampleSearchExport) TableName() string {
 // @return []SampleSearchExport
 // @return error
 func (m *SampleSearchExport) ExportList() ([]SampleSearchExport, error) {
-	db, err := mysqlInit.GetDb()
+	db, err := mysqlInit.Client()
 	if err != nil {
 		return nil, err
 	}
 	out := []SampleSearchExport{}
-	db.Select("*").Where("status=?", 0).Find(out)
+	db.Select("*").Where("status=?", 0).Find(&out)
 	return out, nil
 }
 
@@ -46,9 +48,10 @@ func (m *SampleSearchExport) ExportList() ([]SampleSearchExport, error) {
 // @Description: //TODO
 // @receiver m *SampleSearchExport
 func (m *SampleSearchExport) Update() error {
-	db, err := mysqlInit.GetDb()
+	db, err := mysqlInit.Client()
 	if err != nil {
 		return err
 	}
+	m.UpdateTime = time.Now().Format("2006-01-02 15:04:05")
 	return db.Save(m).Error
 }

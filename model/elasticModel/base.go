@@ -28,7 +28,7 @@ type Model struct {
 //	@param esType string
 //	@return error
 func BachInsert(ctx context.Context, model Interface, jsonDataMap map[string]string) error {
-	es, err := elasticInit.New()
+	es, err := elasticInit.Client()
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func BachInsert(ctx context.Context, model Interface, jsonDataMap map[string]str
 // @param doc interface{}
 // @return error
 func Update(ctx context.Context, model Interface, id string, doc interface{}) error {
-	es, err := elasticInit.New()
+	es, err := elasticInit.Client()
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func Update(ctx context.Context, model Interface, id string, doc interface{}) er
 //	@return string 数据为Json格式
 //	@return error
 func GetList(ctx context.Context, model Interface, query elastic.Query, source *elastic.FetchSourceContext, searchAfter []interface{}, limit int, sortAsc bool) (*elastic.SearchResult, error) {
-	es, err := elasticInit.New()
+	es, err := elasticInit.Client()
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func GetInfoById(ctx context.Context, model Interface, id string, fields ...stri
 		source.Include(fields...)
 	}
 
-	es, err := elasticInit.New()
+	es, err := elasticInit.Client()
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func GetInfoById(ctx context.Context, model Interface, id string, fields ...stri
 // @return *elastic.SearchResult
 // @return error
 func GetListAggs(ctx context.Context, model Interface, query elastic.Query, aggs elastic.Aggregation) (*elastic.SearchResult, error) {
-	es, err := elasticInit.New()
+	es, err := elasticInit.Client()
 	if err != nil {
 		return nil, err
 	}

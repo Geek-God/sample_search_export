@@ -14,7 +14,7 @@ import (
 )
 
 type mysqler struct {
-	d *gorm.DB
+	db *gorm.DB
 }
 
 var m *mysqler
@@ -44,35 +44,27 @@ func openDB(username, password, host, charset, database string, port int) (*gorm
 	return db, nil
 }
 
-//	Init
-//	@Author WXZ
-//	@Description:
-func New() error {
-	//如果有连接则不初始化
-	if m != nil && m.d != nil {
-		Close()
+// Client
+// @Author WXZ
+// @Description: //TODO
+// @return *gorm.DB
+// @return error
+func Client() (*gorm.DB, error) {
+	if m != nil && m.db != nil && m.db.DB().Ping() == nil {
+		return m.db, nil
 	}
-
-	db, err := GetDb()
-	if err != nil {
-		return err
+	if err := New(); err != nil {
+		return nil, err
 	}
-
-	m = &mysqler{
-		db,
-	}
-	return nil
+	return m.db, nil
 }
 
-//	GetDb
-//	@Author WXZ
-//	@Description: 获取连接
-//	@return *gorm.DB
-func GetDb() (*gorm.DB, error) {
-	if m != nil && m.d != nil && m.d.DB().Ping() == nil {
-		return m.d, nil
-	}
-	return openDB(
+// New
+// @Author WXZ
+// @Description: //TODO
+// @return error
+func New() error {
+	conn, err := openDB(
 		viper.GetString("mysql.username"),
 		viper.GetString("mysql.password"),
 		viper.GetString("mysql.host"),
@@ -80,6 +72,13 @@ func GetDb() (*gorm.DB, error) {
 		viper.GetString("mysql.database"),
 		viper.GetInt("mysql.port"),
 	)
+	if err != nil {
+		return err
+	}
+	m = &mysqler{
+		conn,
+	}
+	return nil
 }
 func Close() error {
 	return m.close()
@@ -91,5 +90,5 @@ func Close() error {
 //	@receiver c *Conn
 //	@return error
 func (m *mysqler) close() error {
-	return m.d.Close()
+	return m.db.Close()
 }

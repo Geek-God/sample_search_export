@@ -37,23 +37,39 @@ func openEs(host string) (*elastic.Client, error) {
 	return client, nil
 }
 
-//	GetEs
-//	@Author WXZ
-//	@Description:
-//	@return *elasticModel.Client
-func New() (*elastic.Client, error) {
+// Client
+// @Author WXZ
+// @Description: //TODO
+// @return *elastic.Client
+// @return error
+func Client() (*elastic.Client, error) {
 	if e != nil && e.c != nil {
 		return e.c, nil
 	}
 
-	client, err := openEs(
-		viper.GetString("elasticInitd.host"),
-	)
-
+	err := New()
 	if err != nil {
 		return nil, err
 	}
 
-	e.c = client
-	return client, nil
+	return e.c, nil
+}
+
+//	GetEs
+//	@Author WXZ
+//	@Description:
+//	@return *elasticModel.Client
+func New() error {
+	client, err := openEs(
+		viper.GetString("elastic.host"),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	e = &elasticer{
+		c: client,
+	}
+	return nil
 }
