@@ -12,6 +12,8 @@ minio:
   host: 192.168.1.83:9000
   access_key: upload
   secret_key: hr_upload#
+export:
+  path: ./export
 log:
   use_json: true
   logger_level: info

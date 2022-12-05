@@ -64,7 +64,6 @@ func Export() error {
 
 		if err != nil {
 			t.exportInfo.Status = conststat.STATUS_FAIL
-			fmt.Println(err.Error())
 			t.exportInfo.Remark = err.Error()
 
 		} else {
@@ -79,7 +78,7 @@ func Export() error {
 
 // writeFile
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO 结果写入文件
 // @param s *mysqlModel.SampleSearchExport
 // @return error
 func (t *task) writeFile() error {
@@ -131,7 +130,7 @@ func (t *task) writeFile() error {
 
 // elasticExport
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO es查询导出
 // @param s mysqlModel.SampleSearchExport
 // @return error
 func (t *task) elasticExport() error {
@@ -196,57 +195,58 @@ func (t *task) elasticExport() error {
 
 // fileExport
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO 上传sha1文件导出
 // @param s *mysqlModel.SampleSearchExport
 // @return error
 func (t *task) sha1Export(sha1 []interface{}) error {
 	search_after := []interface{}{}
 	ctx := context.Background()
 	sample := elasticModel.Samples{}
-	source := elastic.NewFetchSourceContext(true).Include(t.exportInfo.Condition)
+	source := elastic.NewFetchSourceContext(true).Include(t.sliceField...)
 	query := elastic.NewBoolQuery()
 	query.Must(
 		elastic.NewTermsQuery("sha1", sha1...),
 	)
 
-	for {
-		result, err := elasticModel.GetList(ctx, sample, query, source, search_after, len(sha1), true)
-		if err != nil {
-			return err
-		}
-		if result == nil || result.Hits == nil || result.Hits.Hits == nil || len(result.Hits.Hits) <= 0 {
-			return nil
-		}
-
-		for _, value := range result.Hits.Hits {
-			if value.Source == nil {
-				continue
-			}
-			data := make(map[string]interface{}, 1)
-			err := json.Unmarshal(*value.Source, &data)
-			if err != nil {
-				continue
-			}
-			t.ch <- data
-		}
+	result, err := elasticModel.GetList(ctx, sample, query, source, search_after, len(sha1), true)
+	if err != nil {
+		return err
 	}
+	if result == nil || result.Hits == nil || result.Hits.Hits == nil || len(result.Hits.Hits) <= 0 {
+		return nil
+	}
+
+	for _, value := range result.Hits.Hits {
+		if value.Source == nil {
+			continue
+		}
+		data := make(map[string]interface{}, 1)
+		err := json.Unmarshal(*value.Source, &data)
+		if err != nil {
+			continue
+		}
+		t.ch <- data
+	}
+
+	return nil
 }
 
 // ReadFile
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO 按照行读取
 // @param filePath string
 // @param handle func(string)
 // @return error
 func (t *task) readLineFile() error {
 	f, err := os.Open(t.exportInfo.Condition)
-	defer f.Close()
 	if err != nil {
 		return err
 	}
+	defer f.Close()
+
 	buf := bufio.NewReader(f)
-	sha1 := make([]interface{}, 0, 1000)
-	index := 0
+	size := 1000
+	sha1 := make([]interface{}, 0, size)
 	for {
 		line, err := buf.ReadString('\n')
 		if err != nil {
@@ -258,50 +258,52 @@ func (t *task) readLineFile() error {
 			}
 			return err
 		}
+
 		line = strings.TrimSpace(line)
 		sha1 = append(sha1, line)
 
-		if y := index % 1000; y == 0 {
+		if len(sha1) > size {
 			t.sha1Export(sha1)
 			sha1 = sha1[:0]
 		}
 	}
-
+	return nil
 }
 
 // readBlock
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO 按照指定长度读取
 // @param filename string
 // @return content []byte
 func (t *task) readFileBlock() error {
 	//打开文件
-	fileHandler, err := os.Open(t.exportInfo.Condition)
+	file, err := os.Open(t.exportInfo.Condition)
 	if err != nil {
 		return err
 	}
 	//关闭文件
-	defer fileHandler.Close()
+	defer file.Close()
 	buffer := make([]byte, 41)
-	sha1 := make([]interface{}, 0, 1000)
-	index := 0
+	size := 1000
+	sha1 := make([]interface{}, 0, size)
+
 	for {
-		n, err := fileHandler.Read(buffer)
-		if err != nil && err != io.EOF {
+		n, err := file.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				if len(sha1) > 0 {
+					t.sha1Export(sha1)
+				}
+				return nil
+			}
 			return err
 		}
-		//读取完成
-		if n == 0 {
-			if len(sha1) > 0 {
-				t.sha1Export(sha1)
-			}
-			break
-		}
-		str := string(buffer)
+
+		str := string(buffer[:n])
 		str = strings.Trim(str, ",")
 		sha1 = append(sha1, str)
 
-		if y := index % 1000; y == 0 {
+		if len(sha1) >= size {
 			t.sha1Export(sha1)
 			sha1 = sha1[:0]
 		}
@@ -311,7 +313,7 @@ func (t *task) readFileBlock() error {
 
 // fileType
 // @Author WXZ
-// @Description: //TODO
+// @Description: //TODO 文件上传导出
 // @param path string
 // @return int
 // @return error
