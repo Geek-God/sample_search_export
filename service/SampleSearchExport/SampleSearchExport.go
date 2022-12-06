@@ -422,7 +422,7 @@ func (t *task) uploadMinio() error {
 		minio.PutObjectOptions{ContentType: "application/text"},
 	)
 	if err == nil {
-		t.exportInfo.DownUrl = path.Join("http://"+viper.GetString("minio.host"), bucket_name, obj_name)
+		t.exportInfo.DownUrl = "http://" + path.Join(viper.GetString("minio.host"), bucket_name, obj_name)
 		os.Remove(t.localPath)
 	}
 	return err
