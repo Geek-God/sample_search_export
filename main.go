@@ -52,7 +52,7 @@ func main() {
 		if err != nil {
 			logrus.Error(err.Error())
 		}
-		time.Sleep(300 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
 

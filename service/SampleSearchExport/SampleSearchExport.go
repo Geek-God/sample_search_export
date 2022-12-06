@@ -106,13 +106,14 @@ func antsSubmit(antsPool *ants.Pool, info mysqlModel.SampleSearchExport) error {
 		if err != nil {
 			t.exportInfo.Status = conststat.STATUS_FAIL
 			t.exportInfo.Remark = err.Error()
+			logrus.Errorf("导出失败，任务ID：%v ,err：%v", t.exportInfo.ID, err)
 		} else {
 			t.exportInfo.Status = conststat.STATUS_END
+			logrus.Infof("导出成功，任务id：%v", info.ID)
 		}
 
-		logrus.Infof("结束导出，任务id：%v", info.ID)
 		if err = t.exportInfo.Update(); err != nil {
-			logrus.Error(err)
+			logrus.Errorf("导出失败，任务ID：%v ,err：%v", t.exportInfo.ID, err)
 		}
 	})
 }
@@ -182,6 +183,7 @@ func (t *task) elasticExport() error {
 	search_after := []interface{}{}
 	ctx := context.Background()
 	size := 1000
+	hits_size := 0
 
 	sample := elasticModel.Samples{}
 	source := elastic.NewFetchSourceContext(true).Include(t.sliceField...)
@@ -217,10 +219,12 @@ func (t *task) elasticExport() error {
 		if err != nil {
 			return err
 		}
-		if result == nil || result.Hits == nil || result.Hits.Hits == nil || len(result.Hits.Hits) <= 0 {
+
+		hits_size = len(result.Hits.Hits)
+		if result == nil || result.Hits == nil || result.Hits.Hits == nil || hits_size <= 0 {
 			return nil
 		}
-		search_after = result.Hits.Hits[len(result.Hits.Hits)-1].Sort
+		search_after = result.Hits.Hits[hits_size-1].Sort
 
 		for _, value := range result.Hits.Hits {
 			if value.Source == nil {
@@ -233,7 +237,12 @@ func (t *task) elasticExport() error {
 			}
 			t.ch <- data
 		}
-		if len(result.Hits.Hits) < size {
+
+		//更新进度，批量更新
+		t.exportInfo.ExportCount += hits_size
+		t.exportInfo.Update()
+
+		if hits_size < size {
 			break
 		}
 	}
@@ -259,7 +268,9 @@ func (t *task) sha1Export(sha1 []interface{}) error {
 	if err != nil {
 		return err
 	}
-	if result == nil || result.Hits == nil || result.Hits.Hits == nil || len(result.Hits.Hits) <= 0 {
+	hits_size := len(result.Hits.Hits)
+
+	if result == nil || result.Hits == nil || result.Hits.Hits == nil || hits_size <= 0 {
 		return nil
 	}
 
@@ -274,6 +285,9 @@ func (t *task) sha1Export(sha1 []interface{}) error {
 		}
 		t.ch <- data
 	}
+	//更新进度，批量更新
+	t.exportInfo.ExportCount += hits_size
+	t.exportInfo.Update()
 
 	return nil
 }

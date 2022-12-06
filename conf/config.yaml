@@ -14,7 +14,7 @@ minio:
   secret_key: hr_upload#
   bucket_name: sample-export
 export:
-  path: ./export
+  path: ./fields
 log:
   use_json: true
   logger_level: info
