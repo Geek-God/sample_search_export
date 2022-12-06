@@ -17,7 +17,7 @@ import (
 // @return bool
 // @return error
 func SampleSha1Metch(str string) (bool, error) {
-	return regexp.MatchString(`/[\w\d]{40}/`, str)
+	return regexp.MatchString(`[\w\d]{40}`, str)
 }
 
 // FileExists

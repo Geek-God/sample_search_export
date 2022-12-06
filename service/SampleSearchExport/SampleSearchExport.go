@@ -153,10 +153,16 @@ func (t *task) writeFile() error {
 		line = ""
 		for _, value := range t.sliceField {
 			switch (v[value]).(type) {
-			case []string:
-				slice_str := (v[value]).([]string)
-				str := strings.Join(slice_str, ",")
-				line += fmt.Sprintf("\"%s\",", str)
+			case []interface{}:
+				slice_str, ok := (v[value]).([]interface{})
+				if ok {
+					str := ""
+					for _, v := range slice_str {
+						str = fmt.Sprintf("%v,", v)
+					}
+					str = strings.Trim(str, ",")
+					line += fmt.Sprintf("\"%s\",", str)
+				}
 			default:
 				line += fmt.Sprintf("\"%v\",", v[value])
 			}
@@ -237,7 +243,6 @@ func (t *task) elasticExport() error {
 			}
 			t.ch <- data
 		}
-
 		//更新进度，批量更新
 		t.exportInfo.ExportCount += hits_size
 		t.exportInfo.Update()
