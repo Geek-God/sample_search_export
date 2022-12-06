@@ -76,6 +76,7 @@ func antsSubmit(antsPool *ants.Pool, info mysqlModel.SampleSearchExport) error {
 	return antsPool.Submit(func() {
 		logrus.Infof("开始导出，任务id：%v", info.ID)
 		info.Status = conststat.STATUS_START
+		info.ExportCount = 0
 		err := info.Update()
 		if err != nil {
 			log.Fatal(err)
