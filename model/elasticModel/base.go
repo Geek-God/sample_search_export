@@ -89,7 +89,7 @@ func GetList(ctx context.Context, model Interface, query elastic.Query, source *
 		From(0).
 		Size(limit).
 		Pretty(true).
-		Sort("id", sortAsc).
+		Sort("_id", sortAsc).
 		FetchSourceContext(source).
 		Do(ctx)
 	return result, err
